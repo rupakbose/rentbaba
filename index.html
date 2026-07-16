@@ -14,11 +14,20 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
+    <!-- Intro.js CSS (Modern Light Theme) -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/intro.js/minified/introjs.min.css"
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Premium Custom Search Wrapper -->
-    <div class="search-wrapper">
+    <!-- Premium Custom Search Wrapper (Intro Step 2) -->
+    <div
+      class="search-wrapper"
+      data-intro="🔍 <b>Localized Search</b><br>Looking for a specific street, station, or landmark? Type it here to instantly fly there with smart Mumbai-biased autocomplete."
+      data-step="2"
+    >
       <div class="search-bar-container">
         <span class="search-icon">🔍</span>
         <input
@@ -32,7 +41,12 @@
       <div id="search-results" class="search-results-dropdown"></div>
     </div>
 
-    <div id="map"></div>
+    <!-- Map container acts as Step 1 & Step 3 -->
+    <div
+      id="map"
+      data-intro="🗺️ <b>Mumbai Renter's Livability Map</b><br>Welcome! This interactive map calculates real-time proximity scores for every building based on walking distances to transit, healthcare, and green spaces."
+      data-step="1"
+    ></div>
 
     <!-- Leaflet JS -->
     <script
@@ -40,6 +54,8 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <!-- Intro.js JS -->
+    <script src="https://unpkg.com/intro.js/minified/intro.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

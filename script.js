@@ -298,3 +298,107 @@ legend.onAdd = function() {
     return div;
 };
 legend.addTo(map);
+
+// -------------------------------------------------------------------------
+// 7. INTERACTIVE WEBSITE ONBOARDING TOUR
+// -------------------------------------------------------------------------
+function initInteractiveTour() {
+    // Check if user has already completed the tour previously
+    const hasSeenTour = localStorage.getItem('renter_map_tour_completed');
+    if (hasSeenTour) return;
+
+    // Wait slightly for the map and initial geojson coordinates to settle beautifully
+    setTimeout(() => {
+        const tour = introJs();
+
+        tour.setOptions({
+            showProgress: true,
+            exitOnOverlayClick: false,
+            exitOnEsc: true,
+            nextLabel: 'Next →',
+            prevLabel: '← Back',
+            skipLabel: 'Skip Tour',
+            doneLabel: 'Let\'s Explore!',
+            steps: [
+                {
+                    element: document.querySelector('#map'),
+                    intro: "🗺️ <b>Mumbai Renter's Livability Map</b><br><br>Welcome! This platform analyzes building locations in real time, scoring them based on walkability to key conveniences.",
+                    position: 'floating'
+                },
+                {
+                    element: document.querySelector('.search-wrapper'),
+                    intro: "🔍 <b>Smart Local Search</b><br><br>Type in any neighborhood, metro station, or street. We use local-biased geocoding to quickly center your search around Mumbai neighborhoods.",
+                    position: 'bottom'
+                },
+                {
+                    element: document.querySelector('#map'),
+                    intro: "🏢 <b>Interactive Buildings</b><br><br>Zoom in and tap on any colored building to inspect its custom convenience breakdown, transit proximity, and green space distance.",
+                    position: 'floating'
+                },
+                {
+                    element: document.querySelector('.legend'),
+                    intro: "🎨 <b>The Convenience Scale</b><br><br>Use this scale to spot ideal neighborhoods:<br><br>🟢 <b>Emerald Green</b> points out Walker's Paradises, while 🔴 <b>Pastel Red</b> highlights car-dependent or isolated units.",
+                    position: 'top'
+                }
+            ]
+        });
+
+        // Custom actions on step changes
+        tour.onbeforechange(function(targetElement) {
+            const currentStep = this._currentStep;
+            
+            // If going to the Legend or Buildings step, make sure map stays focused
+            if (currentStep === 2) {
+                map.setView([19.0735, 72.8393], 17, { animate: true });
+            }
+        });
+
+        // Set localStorage on complete or skip to prevent recurring intrusions
+        const finishTour = () => localStorage.setItem('renter_map_tour_completed', 'true');
+        tour.oncomplete(finishTour);
+        tour.onexit(finishTour);
+
+        // Start the engine
+        tour.start();
+    }, 1200); // 1.2-second smooth entry buffer
+}
+
+// -------------------------------------------------------------------------
+// 8. DATA INITIALIZATION WRAPPER
+// -------------------------------------------------------------------------
+// Append your dynamic data loaders from the previous script.js inside here
+// and call initInteractiveTour() once all baseline elements have resolved!
+Promise.all([
+    fetch('buildings.geojson').then(res => res.json()),
+    fetch('utilities.geojson').then(res => res.json()),
+    fetch('green_spaces.geojson').then(res => res.json())
+]).then(([buildings, utilities, greenSpaces]) => {
+    
+    // 1. Set global building cache
+    allBuildingsData = buildings;
+    updateVisibleBuildings();
+
+    // 2. Load Utilities
+    L.geoJSON(utilities, {
+        pointToLayer: function(feature, latlng) {
+            const name = feature.properties.names ? JSON.parse(feature.properties.names.replace(/'/g, '"')).primary || 'Facility' : 'Utility Link';
+            return L.marker(latlng, { icon: createHTMLIcon('🏥', 'marker-utility') })
+                .bindPopup(`<strong style="color:#2b6cb0;">Transit / Medical Necessity:</strong><br/>${name}`);
+        }
+    }).addTo(map);
+
+    // 3. Load Green Spaces
+    L.geoJSON(greenSpaces, {
+        pointToLayer: function(feature, latlng) {
+            const name = feature.properties.names ? JSON.parse(feature.properties.names.replace(/'/g, '"')).primary || 'Park' : 'Green Space';
+            return L.marker(latlng, { icon: createHTMLIcon('🌳', 'marker-green') })
+                .bindPopup(`<strong style="color:#2f855a;">Nature & Recreation:</strong><br/>${name}`);
+        }
+    }).addTo(map);
+
+    // 4. Trigger onboarding once map components are populated
+    initInteractiveTour();
+}).catch(err => {
+    console.error("Data pipeline load error, launching tour fallback:", err);
+    initInteractiveTour();
+});

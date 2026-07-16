@@ -209,3 +209,67 @@ html, body {
         max-width: 170px;
     }
 }
+
+/* Onboarding Tooltip Customization */
+.introjs-tooltip {
+    background: rgba(255, 255, 255, 0.96) !important;
+    backdrop-filter: blur(10px);
+    border-radius: 14px !important;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    color: #2d3748 !important;
+    padding: 18px !important;
+    max-width: 320px !important;
+}
+
+.introjs-tooltip-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: #2b6cb0 !important;
+}
+
+.introjs-tooltiptext {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    color: #4a5568 !important;
+}
+
+/* Onboarding Buttons Customization */
+.introjs-button {
+    background: #2b6cb0 !important;
+    color: #ffffff !important;
+    text-shadow: none !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    padding: 8px 14px !important;
+    transition: background 0.15s ease !important;
+}
+
+.introjs-button:hover {
+    background: #2c5282 !important;
+}
+
+.introjs-skipbutton {
+    color: #718096 !important;
+    background: transparent !important;
+    font-weight: 500 !important;
+}
+
+.introjs-bullets ul li a.active {
+    background: #2b6cb0 !important;
+}
+
+/* Ensure progress indicators match theme */
+.introjs-progress {
+    background-color: #e2e8f0 !important;
+    height: 6px !important;
+    border-radius: 3px !important;
+}
+
+.introjs-progressbar {
+    background-color: #3182ce !important;
+    border-radius: 3px !important;
+}
