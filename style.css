@@ -1,0 +1,211 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #f4f6f8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* --- COMMANDING, LARGER CUSTOM SEARCH WRAPPER --- */
+.search-wrapper {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    width: 420px; /* Highly visible, prominent desktop width */
+    max-width: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.search-bar-container {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    border-radius: 14px;
+    padding: 6px 16px;
+}
+
+.search-icon {
+    font-size: 18px;
+    margin-right: 12px;
+    color: #a0aec0;
+}
+
+#search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 16px; /* Thick, readable font size (prevents iOS auto-zoom) */
+    font-weight: 500;
+    color: #2d3748;
+    padding: 10px 0;
+    outline: none;
+    width: 100%;
+}
+
+#search-input::placeholder {
+    color: #a0aec0;
+}
+
+#clear-search {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    color: #a0aec0;
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.15s;
+}
+
+#clear-search:hover {
+    color: #e53e3e;
+}
+
+/* Elegant Geocoding Autocomplete Dropdown */
+.search-results-dropdown {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
+    border-radius: 14px;
+    max-height: 280px;
+    overflow-y: auto;
+    display: none;
+}
+
+.search-result-item {
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #4a5568;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    transition: background 0.15s;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-item:hover {
+    background: #edf2f7;
+    color: #2b6cb0;
+}
+
+/* --- PULSING SEARCH HIGHLIGHT MARKER --- */
+.pulse-marker {
+    width: 20px;
+    height: 20px;
+    background: #3182ce;
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(49, 130, 206, 0.8);
+    position: relative;
+}
+
+.pulse-marker::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(49, 130, 206, 0.6);
+    animation: ripple 1.6s infinite ease-out;
+}
+
+@keyframes ripple {
+    0% { transform: scale(0.5); opacity: 1; }
+    100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* --- GLASSMORPHISM RENTER LEGEND --- */
+.legend {
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    line-height: 20px;
+    color: #2c3e50;
+    max-width: 240px;
+}
+
+.legend h4 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #1a202c;
+    border-bottom: 2px solid rgba(0,0,0,0.05);
+    padding-bottom: 4px;
+    font-weight: 800;
+}
+
+.legend i {
+    width: 14px;
+    height: 14px;
+    float: left;
+    margin-right: 8px;
+    border-radius: 3px;
+}
+
+/* Custom Marker Pins */
+.marker-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 32px !important;
+    height: 32px !important;
+}
+
+.custom-marker {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    border: 2px solid #ffffff;
+    font-size: 14px;
+}
+
+.marker-utility { background-color: #3182ce; }
+.marker-green { background-color: #38a169; }
+
+/* --- MOBILE SPECIFIC SCALING --- */
+@media (max-width: 768px) {
+    .search-wrapper {
+        top: 12px;
+        left: 12px;
+        width: calc(100% - 24px); /* Expands to full screen width comfortably */
+    }
+    
+    #search-input {
+        font-size: 15px;
+        padding: 8px 0;
+    }
+    
+    .legend {
+        padding: 8px 10px;
+        font-size: 11px;
+        max-width: 170px;
+    }
+}
