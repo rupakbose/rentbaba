@@ -300,16 +300,24 @@ legend.onAdd = function() {
 legend.addTo(map);
 
 // -------------------------------------------------------------------------
-// 7. INTERACTIVE WEBSITE ONBOARDING TOUR
+// 7. INTERACTIVE WEBSITE ONBOARDING TOUR (MOBILE-OPTIMIZED)
 // -------------------------------------------------------------------------
 function initInteractiveTour() {
-    // Check if user has already completed the tour previously
-    const hasSeenTour = localStorage.getItem('renter_map_tour_completed');
-    if (hasSeenTour) return;
+    // 💡 DEV TRICK: Adding "?tour=true" to your URL will bypass the cache and force the tour to run!
+    const urlParams = new URLSearchParams(window.location.search);
+    const forceTour = urlParams.get('tour') === 'true';
 
-    // Wait slightly for the map and initial geojson coordinates to settle beautifully
+    const hasSeenTour = localStorage.getItem('renter_map_tour_completed');
+    
+    // If they've seen it and we aren't forcing it, exit.
+    if (hasSeenTour && !forceTour) return;
+
+    // Give mobile layout rendering engines extra time (1.5s) to complete layout shifts
     setTimeout(() => {
         const tour = introJs();
+
+        // Determine if we are on a small screen to optimize tooltips
+        const isMobile = window.innerWidth <= 768;
 
         tour.setOptions({
             showProgress: true,
@@ -317,8 +325,12 @@ function initInteractiveTour() {
             exitOnEsc: true,
             nextLabel: 'Next →',
             prevLabel: '← Back',
-            skipLabel: 'Skip Tour',
-            doneLabel: 'Let\'s Explore!',
+            skipLabel: 'Skip',
+            doneLabel: 'Explore!',
+            autoPosition: true,             // 🚀 Forces dynamic placement adjustments
+            scrollToElement: true,          // Ensures mobile screen scrolls to target
+            scrollPadding: 30,
+            overlayOpacity: 0.6,
             steps: [
                 {
                     element: document.querySelector('#map'),
@@ -327,8 +339,8 @@ function initInteractiveTour() {
                 },
                 {
                     element: document.querySelector('.search-wrapper'),
-                    intro: "🔍 <b>Smart Local Search</b><br><br>Type in any neighborhood, metro station, or street. We use local-biased geocoding to quickly center your search around Mumbai neighborhoods.",
-                    position: 'bottom'
+                    intro: "🔍 <b>Smart Local Search</b><br><br>Type in any neighborhood, metro station, or street. We use local-biased geocoding to quickly center your search around Mumbai.",
+                    position: isMobile ? 'bottom' : 'right' // Prevent clipping on narrow mobile screens
                 },
                 {
                     element: document.querySelector('#map'),
@@ -338,29 +350,25 @@ function initInteractiveTour() {
                 {
                     element: document.querySelector('.legend'),
                     intro: "🎨 <b>The Convenience Scale</b><br><br>Use this scale to spot ideal neighborhoods:<br><br>🟢 <b>Emerald Green</b> points out Walker's Paradises, while 🔴 <b>Pastel Red</b> highlights car-dependent or isolated units.",
-                    position: 'top'
+                    position: isMobile ? 'top' : 'left'
                 }
             ]
         });
 
-        // Custom actions on step changes
-        tour.onbeforechange(function(targetElement) {
+        // Ensure map shifts nicely to focus targets during the tour
+        tour.onbeforechange(function() {
             const currentStep = this._currentStep;
-            
-            // If going to the Legend or Buildings step, make sure map stays focused
             if (currentStep === 2) {
                 map.setView([19.0735, 72.8393], 17, { animate: true });
             }
         });
 
-        // Set localStorage on complete or skip to prevent recurring intrusions
         const finishTour = () => localStorage.setItem('renter_map_tour_completed', 'true');
         tour.oncomplete(finishTour);
         tour.onexit(finishTour);
 
-        // Start the engine
         tour.start();
-    }, 1200); // 1.2-second smooth entry buffer
+    }, 1500); 
 }
 
 // -------------------------------------------------------------------------
