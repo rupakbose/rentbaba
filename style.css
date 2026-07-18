@@ -534,3 +534,22 @@ input:checked + .switch-slider:before {
         min-width: 24px;
     }
 }
+
+/* Custom Native Collapsible Popover Configurations */
+.popup-details-tray::-webkit-details-marker {
+    display: none !important; /* Strips ugly default browser triangle indicators */
+}
+
+.popup-details-tray summary {
+    list-style: none; /* Uniform cross-browser list reset */
+}
+
+/* Intercept Open State State Modifications */
+.popup-details-tray[open] .details-toggle-arrow {
+    font-size: 0;
+}
+
+.popup-details-tray[open] .details-toggle-arrow::before {
+    content: "Hide details ▴";
+    font-size: 11px;
+}

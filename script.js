@@ -11,9 +11,9 @@ let rawWeights = { utility: 40, green: 30, quietness: 30 };
 
 // High-precision geometric coordinate anchors for core operational areas
 const CITY_ANCHORS = {
-    mumbai: { center: [19.073506415477542, 72.83926927214105], zoom: 16 },
-    bengaluru: { center: [12.971598, 77.594566], zoom: 16 },
-    delhi: { center: [28.613939, 77.209021], zoom: 16 }
+    mumbai: { center: [19.073506415477542, 72.83926927214105], zoom: 20 },
+    bengaluru: { center: [12.971598, 77.594566], zoom: 20 },
+    delhi: { center: [28.613939, 77.209021], zoom: 20 }
 };
 
 const map = L.map('map', {
@@ -80,6 +80,10 @@ async function switchCityDataset(cityName) {
     
     currentCity = cityName;
     
+    if (selectedLayer && geojsonLayer) {
+        geojsonLayer.resetStyle(selectedLayer);
+    }
+
     // Purge map feature layer elements safely to protect RAM allocation thresholds
     if (geojsonLayer) {
         map.removeLayer(geojsonLayer);
@@ -122,17 +126,83 @@ async function loadGeoParquetData(fileUrl) {
                 const props = feature.properties;
                 const currentScore = computeSuitabilityScore(props);
 
+                // Compute components for dynamic text rendering
+                const uScore = props.utility_score !== undefined ? props.utility_score : 5;
+                const gScore = props.green_score !== undefined ? props.green_score : 5;
+                const qScore = props.quietness_score !== undefined ? props.quietness_score : 5;
+
+                // Dynamic qualitative description string generator
+                let qualityLabel = "Poor";
+                if (currentScore >= 8.5) qualityLabel = "Excellent";
+                else if (currentScore >= 6.5) qualityLabel = "Good";
+                else if (currentScore >= 4.5) qualityLabel = "Average";
+                else if (currentScore >= 2.5) qualityLabel = "Below Avg";
+
+                // Pure functional dot string mapper (Normalizes a 0-10 scale down to a 5-dot matrix)
+                const getDots = (score) => {
+                    const filled = Math.round(score / 2);
+                    return "●".repeat(filled) + "○".repeat(5 - filled);
+                };
+
+                // Precise walking runtime transformations (Metric base: 80 meters per minute baseline)
+                const getWalkTime = (meters) => {
+                    if (meters === undefined || meters === null) return "N/A";
+                    const mins = Math.round(meters / 80);
+                    return `${meters} m (~${mins} min walk)`;
+                };
+
                 const popupContent = `
-                    <div style="font-size:12px; line-height: 1.5; min-width: 190px; color:#1e293b; padding: 4px 0;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <span style="font-weight:600;">Livability:</span>
-                            <strong style="font-size:16px; font-weight:700; color:${getAestheticColor(currentScore)};">${currentScore} / 10</strong>
+                    <div style="font-family: 'Inter', sans-serif; font-size: 12px; line-height: 1.4; min-width: 220px; color: #1e293b; padding: 4px 2px;">
+                        <!-- Header: Score Dashboard Block -->
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <span style="font-weight: 600; font-size: 13px; color: #0f172a;">Livability</span>
+                            <strong style="font-size: 15px; font-weight: 700; color: ${getAestheticColor(currentScore)};">${currentScore.toFixed(1)}/10</strong>
                         </div>
-                        <div style="color: #64748b; font-size: 11px; display: flex; flex-direction: column; gap: 3px;">
-                            <span>🚇 Transit Hub: <b>${props.dist_utility_m !== undefined ? props.dist_utility_m + 'm' : 'N/A'}</b></span>
-                            <span>🌳 Green Space: <b>${props.dist_green_m !== undefined ? props.dist_green_m + 'm' : 'N/A'}</b></span>
-                            <span>🔊 Quietness: <b>${props.quietness_score || 0}/10</b></span>
+                        
+                        <!-- Metrics Progress Representation -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="letter-spacing: -1px; font-size: 14px; color: ${getAestheticColor(currentScore)}; font-weight: bold;">
+                                ${"█".repeat(Math.round(currentScore))}${"░".repeat(10 - Math.round(currentScore))}
+                            </div>
+                            <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">${qualityLabel}</span>
                         </div>
+                        
+                        <!-- Segment Summary Grid (Dot Matrix Layout) -->
+                        <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #475569;">🚶 Transit</span>
+                                <span style="font-family: monospace; font-size: 13px; color: #0284c7; letter-spacing: 1px;">${getDots(uScore)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #475569;">🌳 Parks</span>
+                                <span style="font-family: monospace; font-size: 13px; color: #16a34a; letter-spacing: 1px;">${getDots(gScore)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #475569;">🔇 Quiet</span>
+                                <span style="font-family: monospace; font-size: 13px; color: #ea580c; letter-spacing: 1px;">${getDots(qScore)}</span>
+                            </div>
+                        </div>
+
+                        <!-- Collapsible Raw Details Extension Panel -->
+                        <details class="popup-details-tray" style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 4px;">
+                            <summary style="cursor: pointer; font-size: 11px; font-weight: 600; color: #2563eb; outline: none; list-style: none; display: flex; align-items: center; gap: 2px;">
+                                <span class="details-toggle-arrow">Show details ▾</span>
+                            </summary>
+                            <div style="padding-top: 8px; display: flex; flex-direction: column; gap: 8px; color: #334155;">
+                                <div>
+                                    <div style="font-weight: 600; font-size: 11px; color: #475569;">🚶 Walk to nearest transit</div>
+                                    <div style="font-size: 11px; color: #64748b; padding-left: 14px; margin-top: 1px;">${getWalkTime(props.dist_utility_m)}</div>
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; font-size: 11px; color: #475569;">🌳 Walk to nearest park</div>
+                                    <div style="font-size: 11px; color: #64748b; padding-left: 14px; margin-top: 1px;">${getWalkTime(props.dist_green_m)}</div>
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; font-size: 11px; color: #475569;">🔇 Quietness</div>
+                                    <div style="font-size: 11px; color: #64748b; padding-left: 14px; margin-top: 1px;">${qScore.toFixed(2)} / 10</div>
+                                </div>
+                            </div>
+                        </details>
                     </div>
                 `;
 
@@ -499,7 +569,27 @@ function triggerGuidedOnboarding() {
         tour.start();
     }, 1200);
 }
+// -------------------------------------------------------------------------
+// RE-SET HIGHLIGHT STATE ON BLANK MAP CLICKS & POPUP CLOSURES
+// -------------------------------------------------------------------------
+function clearActiveFeatureSelection() {
+    if (selectedLayer && geojsonLayer) {
+        geojsonLayer.resetStyle(selectedLayer);
+        selectedLayer = null;
+    }
+}
 
+// 1. Clear selection when the user clicks on the empty map backdrop
+map.on('click', function (e) {
+    // Leaflet's map click event automatically ignores vector layer clicks,
+    // making this the safest place to clear highlights.
+    clearActiveFeatureSelection();
+});
+
+// 2. Clear selection when a popup is closed (via 'X' button, Esc key, or map.closePopup())
+map.on('popupclose', function () {
+    clearActiveFeatureSelection();
+});
 // -------------------------------------------------------------------------
 // 9. SYSTEM COLD-START LAUNCH SEQUENCE
 // -------------------------------------------------------------------------
