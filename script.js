@@ -1,9 +1,13 @@
 import { parquetReadObjects } from "https://cdn.jsdelivr.net/npm/hyparquet@1.26.2/+esm";
 import { compressors } from "https://cdn.jsdelivr.net/npm/hyparquet-compressors@0.1.2/+esm";
 import { decompress } from "https://cdn.jsdelivr.net/npm/fzstd@0.1.1/+esm";
+import { wktToGeoJSON } from "https://cdn.jsdelivr.net/npm/@terraformer/wkt@2.2.0/+esm";
 
-// 2. Register the Zstd decoder codec ID (1) into hyparquet's compressor map
-compressors[1] = (input, outputLength) => decompress(input);
+// Wire Zstd codec decompression hook natively
+compressors[1] = (input) => decompress(input);
+
+// Global State Arrays
+let allCachedRecords = []; // Stores lightweight tabular records in memory
 
 // -------------------------------------------------------------------------
 // 1. DOCK-DRIVEN MAP INITIALIZATION (DYNAMIC MULTI-CITY REGISTRY)
@@ -15,9 +19,9 @@ let rawWeights = { utility: 40, green: 30, quietness: 30 };
 
 // High-precision geometric coordinate anchors for core operational areas
 const CITY_ANCHORS = {
-    mumbai: { center: [19.073506415477542, 72.83926927214105], zoom: 20 },
-    bengaluru: { center: [12.971598, 77.594566], zoom: 20 },
-    delhi: { center: [28.613939, 77.209021], zoom: 20 }
+    mumbai: { center: [19.073506415477542, 72.83926927214105], zoom: 18 },
+    bengaluru: { center: [12.971598, 77.594566], zoom: 18 },
+    delhi: { center: [28.613939, 77.209021], zoom: 18 }
 };
 
 const map = L.map('map', {
@@ -54,7 +58,6 @@ function computeSuitabilityScore(props) {
     return Math.min(10.0, Math.max(1.0, parseFloat(dynamicScore.toFixed(1))));
 }
 
-
 function getAestheticColor(score) {
     return score >= 8.0 ? '#2ECC71' : // Green - Excellent
            score >= 6.5 ? '#F1C40F' : // Yellow - Good
@@ -78,7 +81,7 @@ function computeStyle(properties, isSelected = false) {
 }
 
 // -------------------------------------------------------------------------
-// 3. HIGH-SPEED GEOPARQUET STREAMING & STATE REGISTRATION PIPELINE
+// 3. HIGH-SPEED GEOPARQUET STREAMING & VIEWPORT VIRTUALIZATION ENGINE
 // -------------------------------------------------------------------------
 async function switchCityDataset(cityName) {
     if (currentCity === cityName && geojsonLayer) return; // Already displaying this target asset
@@ -102,6 +105,8 @@ async function switchCityDataset(cityName) {
         focusGlowMarker = null;
     }
 
+    allCachedRecords = []; // Reset RAM cache before pulling incoming environment
+
     const target = CITY_ANCHORS[cityName];
     map.flyTo(target.center, target.zoom, { animate: true, duration: 1.2 });
 
@@ -114,10 +119,87 @@ async function switchCityDataset(cityName) {
 }
 
 async function loadGeoParquetData(fileUrl) {
-    // 1. Initialize Leaflet Map Feature Layer
-    geojsonLayer = L.geoJSON(null, {
+    // 1. Fetch the highly compressed binary file into an ArrayBuffer
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`HTTP Error fetching parquet asset: ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Create the AsyncBuffer wrapper layout required by hyparquet's streaming architecture
+    const asyncBuffer = {
+        byteLength: arrayBuffer.byteLength,
+        slice: async (start, end) => arrayBuffer.slice(start, end)
+    };
+    
+    // 2. Stream the array records cleanly directly into RAM
+    allCachedRecords = await parquetReadObjects({
+        file: asyncBuffer,
+        compressors: compressors
+    });
+
+    // 3. Run a layout composition execution directly over the dynamic viewport bounds
+    updateMapViewportDisplay();
+    
+    triggerGuidedOnboarding();
+}
+
+/**
+ * Iterates across cached primitives using blindingly fast float intersections,
+ * parses only visible WKT definitions on the fly, and manages Canvas layer memory lifecycle.
+ */
+function updateMapViewportDisplay() {
+    if (!allCachedRecords || allCachedRecords.length === 0) return;
+
+    // Pull current bounding box margins of the viewport frame
+    const mapBounds = map.getBounds();
+    const viewMinX = mapBounds.getWest();
+    const viewMinY = mapBounds.getSouth();
+    const viewMaxX = mapBounds.getEast();
+    const viewMaxY = mapBounds.getNorth();
+
+    // Preserve the ID of the selected layer to restore selection highlights after redrawing
+    const preSelectedId = selectedLayer ? selectedLayer.feature.id : null;
+    selectedLayer = null;
+
+    if (geojsonLayer) {
+        map.removeLayer(geojsonLayer);
+    }
+
+    const visibleFeatures = [];
+
+    // Float-based bounding box verification loop
+    for (let i = 0; i < allCachedRecords.length; i++) {
+        const rec = allCachedRecords[i];
+
+        if (rec.maxx >= viewMinX && rec.minx <= viewMaxX && 
+            rec.maxy >= viewMinY && rec.miny <= viewMaxY) {
+            
+            visibleFeatures.push({
+                type: "Feature",
+                id: rec.id,
+                geometry: wktToGeoJSON(rec.geom_wkt),
+                properties: {
+                    id: rec.id,
+                    dist_utility_m: rec.dist_utility_m !== undefined ? rec.dist_utility_m : 0,
+                    dist_green_m: rec.dist_green_m !== undefined ? rec.dist_green_m : 0,
+                    utility_score: rec.utility_score !== undefined ? rec.utility_score : 5,
+                    green_score: rec.green_score !== undefined ? rec.green_score : 5,
+                    quietness_score: rec.quietness_score !== undefined ? rec.quietness_score : 5
+                }
+            });
+        }
+    }
+
+    // Instantiating dynamic subset features to GPU canvas hook
+    geojsonLayer = L.geoJSON({ type: "FeatureCollection", features: visibleFeatures }, {
+        style: function (feature) {
+            const isSelected = (feature.id === preSelectedId);
+            return computeStyle(feature.properties, isSelected);
+        },
         onEachFeature: function (feature, layer) {
-            layer.setStyle(computeStyle(feature.properties));
+            // Re-establish tracking pointer if matching execution index matches selection hook
+            if (feature.id === preSelectedId) {
+                selectedLayer = layer;
+            }
 
             layer.on('click', function (e) {
                 if (selectedLayer) {
@@ -131,25 +213,21 @@ async function loadGeoParquetData(fileUrl) {
                 const props = feature.properties;
                 const currentScore = computeSuitabilityScore(props);
 
-                // Compute components for dynamic text rendering
-                const uScore = props.utility_score !== undefined ? props.utility_score : 5;
-                const gScore = props.green_score !== undefined ? props.green_score : 5;
-                const qScore = props.quietness_score !== undefined ? props.quietness_score : 5;
+                const uScore = props.utility_score;
+                const gScore = props.green_score;
+                const qScore = props.quietness_score;
 
-                // Dynamic qualitative description string generator
                 let qualityLabel = "Poor";
                 if (currentScore >= 8.5) qualityLabel = "Excellent";
                 else if (currentScore >= 6.5) qualityLabel = "Good";
                 else if (currentScore >= 4.5) qualityLabel = "Average";
                 else if (currentScore >= 2.5) qualityLabel = "Below Avg";
 
-                // Pure functional dot string mapper (Normalizes a 0-10 scale down to a 5-dot matrix)
                 const getDots = (score) => {
                     const filled = Math.round(score / 2);
                     return "●".repeat(filled) + "○".repeat(5 - filled);
                 };
 
-                // Precise walking runtime transformations (Metric base: 80 meters per minute baseline)
                 const getWalkTime = (meters) => {
                     if (meters === undefined || meters === null) return "N/A";
                     const mins = Math.round(meters / 80);
@@ -158,13 +236,11 @@ async function loadGeoParquetData(fileUrl) {
 
                 const popupContent = `
                     <div style="font-family: 'Inter', sans-serif; font-size: 12px; line-height: 1.4; min-width: 220px; color: #1e293b; padding: 4px 2px;">
-                        <!-- Header: Score Dashboard Block -->
                         <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
                             <span style="font-weight: 600; font-size: 13px; color: #0f172a;">Livability</span>
                             <strong style="font-size: 15px; font-weight: 700; color: ${getAestheticColor(currentScore)};">${currentScore.toFixed(1)}/10</strong>
                         </div>
                         
-                        <!-- Metrics Progress Representation -->
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div style="letter-spacing: -1px; font-size: 14px; color: ${getAestheticColor(currentScore)}; font-weight: bold;">
                                 ${"█".repeat(Math.round(currentScore))}${"░".repeat(10 - Math.round(currentScore))}
@@ -172,7 +248,6 @@ async function loadGeoParquetData(fileUrl) {
                             <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">${qualityLabel}</span>
                         </div>
                         
-                        <!-- Segment Summary Grid (Dot Matrix Layout) -->
                         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <span style="color: #475569;">🚶 Transit</span>
@@ -188,7 +263,6 @@ async function loadGeoParquetData(fileUrl) {
                             </div>
                         </div>
 
-                        <!-- Collapsible Raw Details Extension Panel -->
                         <details class="popup-details-tray" style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 4px;">
                             <summary style="cursor: pointer; font-size: 11px; font-weight: 600; color: #2563eb; outline: none; list-style: none; display: flex; align-items: center; gap: 2px;">
                                 <span class="details-toggle-arrow">Show details ▾</span>
@@ -218,64 +292,21 @@ async function loadGeoParquetData(fileUrl) {
             });
         }
     }).addTo(map);
-
-    // 2. Fetch the highly compressed binary file into an ArrayBuffer
-    const response = await fetch(fileUrl);
-    if (!response.ok) throw new Error(`HTTP Error fetching parquet asset: ${response.status}`);
-    const arrayBuffer = await response.arrayBuffer();
-    
-    // Create the AsyncBuffer wrapper layout required by hyparquet's streaming architecture
-    const asyncBuffer = {
-        byteLength: arrayBuffer.byteLength,
-        slice: async (start, end) => arrayBuffer.slice(start, end)
-    };
-    
-    // 3. Read the array records directly using modern hyparquet
-    const records = await parquetReadObjects({
-        file: asyncBuffer, // <-- Pass the wrapped buffer object here
-        compressors: compressors
-    });
-
-    // 4. Transform native records directly into Leaflet-ready GeoJSON features
-    const featureCollection = { type: "FeatureCollection", features: [] };
-
-    records.forEach((row, index) => {
-        let targetGeometry = row.geometry;
-        if (typeof targetGeometry === 'string') {
-            try { targetGeometry = JSON.parse(targetGeometry); } catch(e) { return; }
-        }
-
-        if (!targetGeometry) return; // Guard against corrupt features
-
-        const recordId = row.id !== undefined ? row.id : index;
-
-        featureCollection.features.push({
-            type: "Feature",
-            id: recordId,
-            geometry: targetGeometry,
-            properties: {
-                id: recordId,
-                dist_utility_m: row.dist_utility_m !== undefined ? row.dist_utility_m : 0,
-                dist_green_m: row.dist_green_m !== undefined ? row.dist_green_m : 0,
-                utility_score: row.utility_score !== undefined ? row.utility_score : 0,
-                green_score: row.green_score !== undefined ? row.green_score : 0,
-                quietness_score: row.quietness_score !== undefined ? row.quietness_score : 0
-            }
-        });
-    });
-
-    // 5. Pipe features down into the GPU-accelerated Leaflet Canvas
-    geojsonLayer.addData(featureCollection);
-    
-    triggerGuidedOnboarding();
 }
 
-map.on('popupclose', () => {
-    if (selectedLayer) {
+// Re-bind dynamic viewport updates to Leaflet lifecycle hooks
+map.on('moveend', updateMapViewportDisplay);
+
+function clearActiveFeatureSelection() {
+    if (selectedLayer && geojsonLayer) {
         geojsonLayer.resetStyle(selectedLayer);
         selectedLayer = null;
     }
-});
+}
+
+// Clear selection highlights when clicking empty map terrain or closing popups
+map.on('click', clearActiveFeatureSelection);
+map.on('popupclose', clearActiveFeatureSelection);
 
 // -------------------------------------------------------------------------
 // 4. THEME CONTROLLER
@@ -403,8 +434,6 @@ searchInput.addEventListener('input', function() {
         return;
     }
 
-    // ⚡ INTERCEPT: Core Multi-City Search Routing Engine
-    // If the input matches a key city exactly, inject immediate transition selection mapping
     if (CITY_ANCHORS[cleanQueryLower]) {
         drawCitySwitchRow(cleanQueryLower);
         return;
@@ -418,14 +447,12 @@ searchInput.addEventListener('input', function() {
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-        // Build dynamic focal location context dependent on the currently rendered market asset
         const activeAnchor = CITY_ANCHORS[currentCity].center;
         const strictLocalGeocodeUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(rawQuery)}&lat=${activeAnchor[0]}&lon=${activeAnchor[1]}&limit=5`;
         
         fetch(strictLocalGeocodeUrl)
             .then(res => res.json())
             .then(data => {
-                // Double check if any text result names inside the payload match an available city asset
                 const modifiedFeatures = data.features || [];
                 drawAutocompleteBox(modifiedFeatures);
             })
@@ -438,7 +465,6 @@ function drawCitySwitchRow(cityName) {
     const itemRow = document.createElement('div');
     itemRow.className = 'search-result-item';
     
-    // Capitalize first character for beautiful representation layout
     const formattedName = cityName.charAt(0).toUpperCase() + cityName.slice(1);
     itemRow.innerHTML = `🏢 <strong>Switch Environment:</strong> Load dynamic layout for ${formattedName}`;
     
@@ -466,8 +492,6 @@ function drawDirectCoordinatesRow(coords) {
 
 function drawAutocompleteBox(features) {
     searchResults.innerHTML = '';
-    
-    // If the user hasn't explicitly hit an exact key, but searched for city keywords
     const rawVal = searchInput.value.trim().toLowerCase();
     
     if (CITY_ANCHORS[rawVal]) {
@@ -488,7 +512,6 @@ function drawAutocompleteBox(features) {
         const matchedLabel = `${name}${street}${district}`;
         const matchedLabelLower = matchedLabel.toLowerCase();
 
-        // Check if the result string targets a secondary city environment switch threshold
         let operationalCityMatch = null;
         Object.keys(CITY_ANCHORS).forEach(cKey => {
             if (matchedLabelLower.includes(cKey) && cKey !== currentCity && (rawVal.includes(cKey) || p.type === 'city')) {
@@ -580,29 +603,8 @@ function triggerGuidedOnboarding() {
         tour.start();
     }, 1200);
 }
-// -------------------------------------------------------------------------
-// RE-SET HIGHLIGHT STATE ON BLANK MAP CLICKS & POPUP CLOSURES
-// -------------------------------------------------------------------------
-function clearActiveFeatureSelection() {
-    if (selectedLayer && geojsonLayer) {
-        geojsonLayer.resetStyle(selectedLayer);
-        selectedLayer = null;
-    }
-}
 
-// 1. Clear selection when the user clicks on the empty map backdrop
-map.on('click', function (e) {
-    // Leaflet's map click event automatically ignores vector layer clicks,
-    // making this the safest place to clear highlights.
-    clearActiveFeatureSelection();
-});
-
-// 2. Clear selection when a popup is closed (via 'X' button, Esc key, or map.closePopup())
-map.on('popupclose', function () {
-    clearActiveFeatureSelection();
-});
 // -------------------------------------------------------------------------
 // 9. SYSTEM COLD-START LAUNCH SEQUENCE
 // -------------------------------------------------------------------------
-// Initiates the current active default environment dataset download on application entry
 switchCityDataset(currentCity);
