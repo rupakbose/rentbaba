@@ -50,12 +50,13 @@ function computeSuitabilityScore(props) {
     return Math.min(10.0, Math.max(1.0, parseFloat(dynamicScore.toFixed(1))));
 }
 
+
 function getAestheticColor(score) {
-    return score > 8.5 ? '#047857' : // Emerald
-           score > 6.5 ? '#10b981' : // Soft Green
-           score > 4.5 ? '#f59e0b' : // Amber
-           score > 2.5 ? '#f97316' : // Orange
-                         '#dc2626';  // Crimson
+    return score >= 8.0 ? '#2ECC71' : // Green - Excellent
+           score >= 6.5 ? '#F1C40F' : // Yellow - Good
+           score >= 4.5 ? '#F39C12' : // Orange - Average
+           score >= 2.5 ? '#E74C3C' : // Red - Poor
+                           '#7B241C';  // Dark Maroon - Very Poor
 }
 
 function computeStyle(properties, isSelected = false) {
@@ -65,7 +66,7 @@ function computeStyle(properties, isSelected = false) {
         fillColor: color,
         fillOpacity: isSelected ? 0.95 : 0.70,
         fill: true,
-        stroke: true,
+        stroke: false,
         color: isSelected ? '#ffffff' : '#1e293b', // White outline if selected, otherwise deep charcoal
         weight: isSelected ? 2.5 : 0.75,           // Crisp fine borders
         opacity: isSelected ? 1.0 : 0.8
