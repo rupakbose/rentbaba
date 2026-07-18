@@ -1,27 +1,34 @@
+import { parquetReadObjects } from "https://cdn.jsdelivr.net/npm/hyparquet@1.26.2/+esm";
+import { compressors } from "https://cdn.jsdelivr.net/npm/hyparquet-compressors@0.1.2/+esm";
+
 // -------------------------------------------------------------------------
-// 1. DOCK-DRIVEN MAP INITIALIZATION (MUMBAI-CENTRIC)
+// 1. DOCK-DRIVEN MAP INITIALIZATION (DYNAMIC MULTI-CITY REGISTRY)
 // -------------------------------------------------------------------------
-const MUMBAI_COORDS = [19.073506415477542, 72.83926927214105];
+let geojsonLayer = null;
+let selectedLayer = null;
+let currentCity = 'mumbai'; // Default baseline
+let rawWeights = { utility: 40, green: 30, quietness: 30 };
+
+// High-precision geometric coordinate anchors for core operational areas
+const CITY_ANCHORS = {
+    mumbai: { center: [19.073506415477542, 72.83926927214105], zoom: 16 },
+    bengaluru: { center: [12.971598, 77.594566], zoom: 16 },
+    delhi: { center: [28.613939, 77.209021], zoom: 16 }
+};
 
 const map = L.map('map', {
     zoomControl: false, 
     attributionControl: false,
-    preferCanvas: true, // Hardware-accelerated canvas
-    tap: !L.Browser.mobile,
-    bounceAtZoomLimits: false
-}).setView(MUMBAI_COORDS, 20);
+    preferCanvas: true, // Crucial for rendering thousands of paths instantly
+    tap: !L.Browser.mobile
+}).setView(CITY_ANCHORS[currentCity].center, CITY_ANCHORS[currentCity].zoom);
 
-// Prepare Tile Layers
+// Prepare Basemap Layers
 const lightBasemap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd' });
 const darkBasemap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd' });
 
 const lightLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd', opacity: 0.9 });
 const darkLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd', opacity: 0.85 });
-
-// Establish Separate Labels Pane on top of canvas
-const labelsPane = map.createPane('top-labels');
-labelsPane.style.zIndex = 650;
-labelsPane.style.pointerEvents = 'none';
 
 lightBasemap.addTo(map);
 lightLabels.addTo(map);
@@ -29,15 +36,8 @@ lightLabels.addTo(map);
 // -------------------------------------------------------------------------
 // 2. UNBOUNDED INDEPENDENT SLIDER EQUATIONS
 // -------------------------------------------------------------------------
-let rawWeights = {
-    utility: 40,
-    green: 30,
-    quietness: 30
-};
-
 function computeSuitabilityScore(props) {
     const sum = rawWeights.utility + rawWeights.green + rawWeights.quietness;
-    
     const normUtility = sum > 0 ? (rawWeights.utility / sum) : 0.333;
     const normGreen = sum > 0 ? (rawWeights.green / sum) : 0.333;
     const normQuietness = sum > 0 ? (rawWeights.quietness / sum) : 0.333;
@@ -50,102 +50,154 @@ function computeSuitabilityScore(props) {
     return Math.min(10.0, Math.max(1.0, parseFloat(dynamicScore.toFixed(1))));
 }
 
-// Aesthetic color ramp matching score properties
 function getAestheticColor(score) {
-    return score > 8.5 ? '#047857' : // Deep Emerald
+    return score > 8.5 ? '#047857' : // Emerald
            score > 6.5 ? '#10b981' : // Soft Green
-           score > 4.5 ? '#f59e0b' : // Orange Warning
-           score > 2.5 ? '#f97316' : // Deep Orange
-                         '#dc2626';  // Alert Crimson
+           score > 4.5 ? '#f59e0b' : // Amber
+           score > 2.5 ? '#f97316' : // Orange
+                         '#dc2626';  // Crimson
 }
 
-function computeStyle(feature) {
-    const score = computeSuitabilityScore(feature.properties);
+function computeStyle(properties, isSelected = false) {
+    const score = computeSuitabilityScore(properties);
+    const color = getAestheticColor(score);
     return {
-        fillColor: getAestheticColor(score),
-        weight: 1,
-        opacity: 0.5,
-        color: '#ffffff',
-        fillOpacity: 0.65
+        fillColor: color,
+        fillOpacity: isSelected ? 0.95 : 0.70,
+        fill: true,
+        stroke: true,
+        color: isSelected ? '#ffffff' : '#1e293b', // White outline if selected, otherwise deep charcoal
+        weight: isSelected ? 2.5 : 0.75,           // Crisp fine borders
+        opacity: isSelected ? 1.0 : 0.8
     };
 }
 
 // -------------------------------------------------------------------------
-// 3. PERFORMANCE-FIRST SPATIAL VIEWPORT CULLING & MINIMAL POPUPS
+// 3. HIGH-SPEED GEOPARQUET STREAMING & STATE REGISTRATION PIPELINE
 // -------------------------------------------------------------------------
-let cachedData = null;
-let selectedBuilding = null;
-
-const activeBuildingsLayer = L.geoJSON(null, {
-    style: computeStyle,
-    onEachFeature: function(feature, layer) {
-        layer.on({
-            click: function() {
-                if (selectedBuilding && selectedBuilding !== layer) {
-                    activeBuildingsLayer.resetStyle(selectedBuilding);
-                }
-                layer.setStyle({
-                    weight: 3,
-                    color: '#0f172a',
-                    fillOpacity: 0.95
-                });
-                selectedBuilding = layer;
-            }
-        });
-
-        layer.bindPopup(() => {
-            const props = feature.properties;
-            const currentScore = computeSuitabilityScore(props);
-            
-            // Minimal layout: no "Building Evaluation" header, direct clean metrics
-            return `
-                <div style="font-size:12px; line-height: 1.5; min-width: 190px; color:#1e293b; padding: 4px 0;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <span style="font-weight:600;">Livability:</span>
-                        <strong style="font-size:16px; font-weight:700; color:${getAestheticColor(currentScore)};">${currentScore} / 10</strong>
-                    </div>
-                    <div style="color: #64748b; font-size: 11px; display: flex; flex-direction: column; gap: 3px;">
-                        <span>🚇 Transit: <b>${props.dist_utility_m || 'N/A'}m</b></span>
-                        <span>🌳 Parks: <b>${props.dist_green_m || 'N/A'}m</b></span>
-                        <span>🔊 Quietness: <b>${props.quietness_score || 0}/10</b></span>
-                    </div>
-                </div>
-            `;
-        }, { closeButton: false, offset: L.point(0, -3) });
+async function switchCityDataset(cityName) {
+    if (currentCity === cityName && geojsonLayer) return; // Already displaying this target asset
+    
+    currentCity = cityName;
+    
+    // Purge map feature layer elements safely to protect RAM allocation thresholds
+    if (geojsonLayer) {
+        map.removeLayer(geojsonLayer);
+        geojsonLayer = null;
     }
-}).addTo(map);
-
-function getFeatureCentroid(feature) {
-    let coords = feature.geometry.coordinates;
-    if (feature.geometry.type === 'MultiPolygon') {
-        coords = coords[0][0][0];
-    } else if (feature.geometry.type === 'Polygon') {
-        coords = coords[0][0];
+    if (selectedLayer) {
+        selectedLayer = null;
     }
-    return L.latLng(coords[1], coords[0]);
+    if (focusGlowMarker) {
+        map.removeLayer(focusGlowMarker);
+        focusGlowMarker = null;
+    }
+
+    const target = CITY_ANCHORS[cityName];
+    map.flyTo(target.center, target.zoom, { animate: true, duration: 1.2 });
+
+    try {
+        await loadGeoParquetData(`./${cityName}.parquet`);
+    } catch (err) {
+        console.error(`Error unpacking GeoParquet binary arrays for ${cityName}:`, err);
+        triggerGuidedOnboarding();
+    }
 }
 
-function runViewportSpatialCull() {
-    if (!cachedData) return;
-    const currentBounds = map.getBounds();
+async function loadGeoParquetData(fileUrl) {
+    // 1. Initialize Leaflet Map Feature Layer
+    geojsonLayer = L.geoJSON(null, {
+        onEachFeature: function (feature, layer) {
+            layer.setStyle(computeStyle(feature.properties));
 
-    const culledFeatures = cachedData.features.filter(feat => {
-        try {
-            const point = getFeatureCentroid(feat);
-            return currentBounds.contains(point);
-        } catch (e) {
-            return false;
+            layer.on('click', function (e) {
+                if (selectedLayer) {
+                    geojsonLayer.resetStyle(selectedLayer);
+                }
+
+                selectedLayer = layer;
+                layer.setStyle(computeStyle(feature.properties, true));
+                layer.bringToFront();
+
+                const props = feature.properties;
+                const currentScore = computeSuitabilityScore(props);
+
+                const popupContent = `
+                    <div style="font-size:12px; line-height: 1.5; min-width: 190px; color:#1e293b; padding: 4px 0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-weight:600;">Livability:</span>
+                            <strong style="font-size:16px; font-weight:700; color:${getAestheticColor(currentScore)};">${currentScore} / 10</strong>
+                        </div>
+                        <div style="color: #64748b; font-size: 11px; display: flex; flex-direction: column; gap: 3px;">
+                            <span>🚇 Transit Hub: <b>${props.dist_utility_m !== undefined ? props.dist_utility_m + 'm' : 'N/A'}</b></span>
+                            <span>🌳 Green Space: <b>${props.dist_green_m !== undefined ? props.dist_green_m + 'm' : 'N/A'}</b></span>
+                            <span>🔊 Quietness: <b>${props.quietness_score || 0}/10</b></span>
+                        </div>
+                    </div>
+                `;
+
+                L.popup({ closeButton: false, offset: L.point(0, -3) })
+                    .setLatLng(e.latlng)
+                    .setContent(popupContent)
+                    .openOn(map);
+            });
         }
+    }).addTo(map);
+
+    // 2. Fetch the highly compressed binary file into an ArrayBuffer
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`HTTP Error fetching parquet asset: ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+
+    // 3. Read the array records directly using modern hyparquet
+    const records = await parquetReadObjects({
+        file: arrayBuffer,
+        compressors: compressors
     });
 
-    activeBuildingsLayer.clearLayers();
-    activeBuildingsLayer.addData(culledFeatures);
+    // 4. Transform native records directly into Leaflet-ready GeoJSON features
+    const featureCollection = { type: "FeatureCollection", features: [] };
+
+    records.forEach((row, index) => {
+        let targetGeometry = row.geometry;
+        if (typeof targetGeometry === 'string') {
+            try { targetGeometry = JSON.parse(targetGeometry); } catch(e) { return; }
+        }
+
+        if (!targetGeometry) return; // Guard against corrupt features
+
+        const recordId = row.id !== undefined ? row.id : index;
+
+        featureCollection.features.push({
+            type: "Feature",
+            id: recordId,
+            geometry: targetGeometry,
+            properties: {
+                id: recordId,
+                dist_utility_m: row.dist_utility_m !== undefined ? row.dist_utility_m : 0,
+                dist_green_m: row.dist_green_m !== undefined ? row.dist_green_m : 0,
+                utility_score: row.utility_score !== undefined ? row.utility_score : 0,
+                green_score: row.green_score !== undefined ? row.green_score : 0,
+                quietness_score: row.quietness_score !== undefined ? row.quietness_score : 0
+            }
+        });
+    });
+
+    // 5. Pipe features down into the GPU-accelerated Leaflet Canvas
+    geojsonLayer.addData(featureCollection);
+    
+    triggerGuidedOnboarding();
 }
 
-map.on('moveend zoomend', runViewportSpatialCull);
+map.on('popupclose', () => {
+    if (selectedLayer) {
+        geojsonLayer.resetStyle(selectedLayer);
+        selectedLayer = null;
+    }
+});
 
 // -------------------------------------------------------------------------
-// 4. THEME CONTROLLER (SLIDER SWITCH)
+// 4. THEME CONTROLLER
 // -------------------------------------------------------------------------
 const themeToggleCheckbox = document.getElementById('theme-toggle-checkbox');
 
@@ -164,7 +216,7 @@ themeToggleCheckbox.addEventListener('change', function() {
 });
 
 // -------------------------------------------------------------------------
-// 5. WEIGHT TUNING & VIEWPORT-ONLY REALTIME UPDATE
+// 5. WEIGHT TUNING ENGINE
 // -------------------------------------------------------------------------
 const sUtility = document.getElementById('slider-utility');
 const sGreen = document.getElementById('slider-green');
@@ -175,15 +227,40 @@ function updateWeights() {
     rawWeights.green = parseFloat(sGreen.value);
     rawWeights.quietness = parseFloat(sQuietness.value);
 
-    // Recolor and refresh active viewport components
-    activeBuildingsLayer.setStyle(computeStyle);
+    if (geojsonLayer) {
+        geojsonLayer.eachLayer(function (layer) {
+            const isSelected = (layer === selectedLayer);
+            layer.setStyle(computeStyle(layer.feature.properties, isSelected));
+        });
+
+        // Live update active popup content if visible
+        const activePopup = map._popup;
+        if (activePopup && activePopup.isOpen() && selectedLayer) {
+            const props = selectedLayer.feature.properties;
+            const updatedScore = computeSuitabilityScore(props);
+            
+            const updatedContent = `
+                <div style="font-size:12px; line-height: 1.5; min-width: 190px; color:#1e293b; padding: 4px 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-weight:600;">Livability:</span>
+                        <strong style="font-size:16px; font-weight:700; color:${getAestheticColor(updatedScore)};">${updatedScore} / 10</strong>
+                    </div>
+                    <div style="color: #64748b; font-size: 11px; display: flex; flex-direction: column; gap: 3px;">
+                        <span>🚇 Transit Hub: <b>${props.dist_utility_m !== undefined ? props.dist_utility_m + 'm' : 'N/A'}</b></span>
+                        <span>🌳 Green Space: <b>${props.dist_green_m !== undefined ? props.dist_green_m + 'm' : 'N/A'}</b></span>
+                        <span>🔊 Quietness: <b>${props.quietness_score || 0}/10</b></span>
+                    </div>
+                </div>
+            `;
+            activePopup.setContent(updatedContent);
+        }
+    }
 }
 
 sUtility.addEventListener('input', updateWeights);
 sGreen.addEventListener('input', updateWeights);
 sQuietness.addEventListener('input', updateWeights);
 
-// Clean reset operation
 document.getElementById('reset-weights-btn').addEventListener('click', () => {
     sUtility.value = 40;
     sGreen.value = 30;
@@ -216,7 +293,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // -------------------------------------------------------------------------
-// 7. ROBUST GEOLOCATOR WITH FALLBACKS
+// 7. INTELLIGENT SEARCH ENGINE CONTROLLER & AUTO-CITY COMPILATION
 // -------------------------------------------------------------------------
 const searchInput = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
@@ -235,11 +312,20 @@ function parseCoordinatesInput(text) {
 
 searchInput.addEventListener('input', function() {
     const rawQuery = this.value.trim();
+    const cleanQueryLower = rawQuery.toLowerCase();
+    
     if (rawQuery.length > 0) {
         clearSearchBtn.style.display = 'block';
     } else {
         clearSearchBtn.style.display = 'none';
         searchResults.style.display = 'none';
+        return;
+    }
+
+    // ⚡ INTERCEPT: Core Multi-City Search Routing Engine
+    // If the input matches a key city exactly, inject immediate transition selection mapping
+    if (CITY_ANCHORS[cleanQueryLower]) {
+        drawCitySwitchRow(cleanQueryLower);
         return;
     }
 
@@ -251,23 +337,39 @@ searchInput.addEventListener('input', function() {
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-        const strictLocalGeocodeUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(rawQuery)}&lat=19.0760&lon=72.8777&bbox=72.75,18.88,73.05,19.33&limit=5`;
+        // Build dynamic focal location context dependent on the currently rendered market asset
+        const activeAnchor = CITY_ANCHORS[currentCity].center;
+        const strictLocalGeocodeUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(rawQuery)}&lat=${activeAnchor[0]}&lon=${activeAnchor[1]}&limit=5`;
         
         fetch(strictLocalGeocodeUrl)
             .then(res => res.json())
             .then(data => {
-                if (!data.features || data.features.length === 0) {
-                    const broadUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(rawQuery)}&lat=19.0760&lon=72.8777&limit=5`;
-                    return fetch(broadUrl).then(r => r.json());
-                }
-                return data;
-            })
-            .then(data => {
-                drawAutocompleteBox(data.features);
+                // Double check if any text result names inside the payload match an available city asset
+                const modifiedFeatures = data.features || [];
+                drawAutocompleteBox(modifiedFeatures);
             })
             .catch(err => console.error("Geocoding query timed out or offline", err));
     }, 200);
 });
+
+function drawCitySwitchRow(cityName) {
+    searchResults.innerHTML = '';
+    const itemRow = document.createElement('div');
+    itemRow.className = 'search-result-item';
+    
+    // Capitalize first character for beautiful representation layout
+    const formattedName = cityName.charAt(0).toUpperCase() + cityName.slice(1);
+    itemRow.innerHTML = `🏢 <strong>Switch Environment:</strong> Load dynamic layout for ${formattedName}`;
+    
+    itemRow.addEventListener('click', () => {
+        searchResults.style.display = 'none';
+        searchInput.value = formattedName;
+        switchCityDataset(cityName);
+    });
+    
+    searchResults.appendChild(itemRow);
+    searchResults.style.display = 'block';
+}
 
 function drawDirectCoordinatesRow(coords) {
     searchResults.innerHTML = '';
@@ -283,6 +385,15 @@ function drawDirectCoordinatesRow(coords) {
 
 function drawAutocompleteBox(features) {
     searchResults.innerHTML = '';
+    
+    // If the user hasn't explicitly hit an exact key, but searched for city keywords
+    const rawVal = searchInput.value.trim().toLowerCase();
+    
+    if (CITY_ANCHORS[rawVal]) {
+        drawCitySwitchRow(rawVal);
+        return;
+    }
+
     if (!features || features.length === 0) {
         searchResults.style.display = 'none';
         return;
@@ -294,15 +405,33 @@ function drawAutocompleteBox(features) {
         const street = p.street ? `, ${p.street}` : '';
         const district = p.district ? `, ${p.district}` : '';
         const matchedLabel = `${name}${street}${district}`;
+        const matchedLabelLower = matchedLabel.toLowerCase();
+
+        // Check if the result string targets a secondary city environment switch threshold
+        let operationalCityMatch = null;
+        Object.keys(CITY_ANCHORS).forEach(cKey => {
+            if (matchedLabelLower.includes(cKey) && cKey !== currentCity && (rawVal.includes(cKey) || p.type === 'city')) {
+                operationalCityMatch = cKey;
+            }
+        });
 
         const itemRow = document.createElement('div');
         itemRow.className = 'search-result-item';
-        itemRow.innerText = matchedLabel;
-
-        itemRow.addEventListener('click', () => {
-            const coordinates = f.geometry.coordinates;
-            executeMapNavigation([coordinates[1], coordinates[0]], matchedLabel);
-        });
+        
+        if (operationalCityMatch) {
+            itemRow.innerHTML = `🏢 <b>Switch to ${operationalCityMatch.charAt(0).toUpperCase() + operationalCityMatch.slice(1)}:</b> ${matchedLabel}`;
+            itemRow.addEventListener('click', () => {
+                searchResults.style.display = 'none';
+                searchInput.value = operationalCityMatch.charAt(0).toUpperCase() + operationalCityMatch.slice(1);
+                switchCityDataset(operationalCityMatch);
+            });
+        } else {
+            itemRow.innerText = matchedLabel;
+            itemRow.addEventListener('click', () => {
+                const coordinates = f.geometry.coordinates;
+                executeMapNavigation([coordinates[1], coordinates[0]], matchedLabel);
+            });
+        }
 
         searchResults.appendChild(itemRow);
     });
@@ -339,28 +468,13 @@ clearSearchBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-bar-dock')) {
+    if (!e.target.closest('.control-wrapper')) {
         searchResults.style.display = 'none';
     }
 });
 
 // -------------------------------------------------------------------------
-// 8. UNIFIED GEOSPATIAL PIPELINE INGESTION
-// -------------------------------------------------------------------------
-fetch('buildings.geojson')
-    .then(r => { if (!r.ok) throw r; return r.json(); })
-    .then(buildings => {
-        cachedData = buildings;
-        runViewportSpatialCull();
-        triggerGuidedOnboarding();
-    })
-    .catch(err => {
-        console.warn("Could not retrieve buildings.geojson.", err);
-        triggerGuidedOnboarding();
-    });
-
-// -------------------------------------------------------------------------
-// 9. MINIMAL ONBOARDING TOUR
+// 8. MINIMAL ONBOARDING TOUR
 // -------------------------------------------------------------------------
 function triggerGuidedOnboarding() {
     const hasOnboarded = localStorage.getItem('mumbai_minimal_unbound_onboarded');
@@ -372,7 +486,7 @@ function triggerGuidedOnboarding() {
             nextLabel: 'Next →',
             prevLabel: '← Back',
             skipLabel: 'Skip',
-            doneLabel: 'Explore Mumbai',
+            doneLabel: 'Explore System',
             overlayOpacity: 0.5,
             scrollToElement: true,
             exitOnOverlayClick: false,
@@ -385,3 +499,9 @@ function triggerGuidedOnboarding() {
         tour.start();
     }, 1200);
 }
+
+// -------------------------------------------------------------------------
+// 9. SYSTEM COLD-START LAUNCH SEQUENCE
+// -------------------------------------------------------------------------
+// Initiates the current active default environment dataset download on application entry
+switchCityDataset(currentCity);

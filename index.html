@@ -6,18 +6,15 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>Mumbai Livability Map</title>
-    <!-- Leaflet CSS -->
+    <title>Urban Livability Map</title>
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
-    <!-- Intro.js CSS -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/introjs.min.css"
     />
-    <!-- Google Fonts -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
@@ -25,7 +22,6 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Fullscreen Map Canvas -->
     <div id="map"></div>
 
     <!-- Floating Top Control Bar -->
@@ -35,7 +31,6 @@
         data-step="1"
         data-intro="🔍 <b>Search & Control:</b> Search locations, toggle dark/light theme, or tune livability weights."
       >
-        <!-- SECTION 1: SEARCH (Before the Divider) -->
         <div class="search-section-left">
           <span class="search-icon">🔍</span>
           <input
@@ -46,12 +41,8 @@
           />
           <button id="clear-search" style="display: none">&times;</button>
         </div>
-
         <div class="divider"></div>
-
-        <!-- SECTION 2: UTILITIES (After the Divider) -->
         <div class="utilities-section-right">
-          <!-- Light/Dark Map Toggle Switch -->
           <div
             class="map-theme-control"
             data-step="2"
@@ -64,10 +55,7 @@
             </label>
             <span class="theme-emoji">🌙</span>
           </div>
-
           <div class="inner-divider"></div>
-
-          <!-- Settings Tray Button -->
           <button
             id="toggle-settings-btn"
             class="icon-btn"
@@ -99,14 +87,13 @@
         </div>
       </div>
 
-      <!-- Autocomplete Results Tray (Now positioned as a direct block level sibling) -->
       <div
         id="search-results"
         class="search-dropdown"
         style="display: none"
       ></div>
 
-      <!-- Dropdown Settings Panel -->
+      <!-- Settings Dropdown Panel -->
       <div id="settings-tray" class="settings-dropdown-panel hidden">
         <div class="panel-section">
           <div class="panel-header">
@@ -133,14 +120,9 @@
             </button>
           </div>
 
-          <!-- Intuitive Dual-Polar Sliders -->
-          <!-- Transit -->
+          <!-- Sliders -->
           <div class="slider-container-row">
-            <span
-              class="polar-emoji left-pole"
-              title="Less connected / Isolated"
-              >🚶</span
-            >
+            <span class="polar-emoji left-pole" title="Less connected">🚶</span>
             <div class="slider-wrapper-track">
               <input
                 type="range"
@@ -151,18 +133,10 @@
                 class="custom-range range-utility"
               />
             </div>
-            <span
-              class="polar-emoji right-pole"
-              title="Highly connected / Transit Hub"
-              >🚇</span
-            >
+            <span class="polar-emoji right-pole" title="Transit Hub">🚇</span>
           </div>
-
-          <!-- Greenery -->
           <div class="slider-container-row">
-            <span
-              class="polar-emoji left-pole"
-              title="Urban / Built environment"
+            <span class="polar-emoji left-pole" title="Urban Environment"
               >🧱</span
             >
             <div class="slider-wrapper-track">
@@ -175,18 +149,10 @@
                 class="custom-range range-green"
               />
             </div>
-            <span
-              class="polar-emoji right-pole"
-              title="Lush parks & green spaces"
-              >🌳</span
-            >
+            <span class="polar-emoji right-pole" title="Lush parks">🌳</span>
           </div>
-
-          <!-- Quietness -->
           <div class="slider-container-row">
-            <span class="polar-emoji left-pole" title="Active / Noisy streets"
-              >📢</span
-            >
+            <span class="polar-emoji left-pole" title="Active streets">📢</span>
             <div class="slider-wrapper-track">
               <input
                 type="range"
@@ -197,17 +163,23 @@
                 class="custom-range range-quiet"
               />
             </div>
-            <span class="polar-emoji right-pole" title="Quiet & serene streets"
-              >🤫</span
-            >
+            <span class="polar-emoji right-pole" title="Quiet streets">🤫</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Script imports -->
+    <!-- DEPENDENCY GRAPH -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Ultra-lightweight Pure JS Parquet Engine (No WASM 404 traps) -->
+    <script src="https://cdn.jsdelivr.net/npm/hyparquet@0.4.1/dist/hyparquet.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/intro.js@7.2.0/intro.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js" type="module"></script>
   </body>
 </html>

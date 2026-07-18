@@ -426,6 +426,13 @@ input:checked + .switch-slider:before {
     box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
 }
 
+.leaflet-tile-container canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    -webkit-font-smoothing: antialiased;
+}
+
 /* -------------------------------------------------------------------------
    HIGH-FIDELITY MOBILE PLATFORM ADAPTIVE OVERRIDES
    ------------------------------------------------------------------------- */
