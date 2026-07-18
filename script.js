@@ -1,5 +1,9 @@
 import { parquetReadObjects } from "https://cdn.jsdelivr.net/npm/hyparquet@1.26.2/+esm";
 import { compressors } from "https://cdn.jsdelivr.net/npm/hyparquet-compressors@0.1.2/+esm";
+import { decompress } from "https://cdn.jsdelivr.net/npm/fzstd@0.1.1/+esm";
+
+// 2. Register the Zstd decoder codec ID (1) into hyparquet's compressor map
+compressors[1] = (input, outputLength) => decompress(input);
 
 // -------------------------------------------------------------------------
 // 1. DOCK-DRIVEN MAP INITIALIZATION (DYNAMIC MULTI-CITY REGISTRY)
@@ -219,10 +223,16 @@ async function loadGeoParquetData(fileUrl) {
     const response = await fetch(fileUrl);
     if (!response.ok) throw new Error(`HTTP Error fetching parquet asset: ${response.status}`);
     const arrayBuffer = await response.arrayBuffer();
-
+    
+    // Create the AsyncBuffer wrapper layout required by hyparquet's streaming architecture
+    const asyncBuffer = {
+        byteLength: arrayBuffer.byteLength,
+        slice: async (start, end) => arrayBuffer.slice(start, end)
+    };
+    
     // 3. Read the array records directly using modern hyparquet
     const records = await parquetReadObjects({
-        file: arrayBuffer,
+        file: asyncBuffer, // <-- Pass the wrapped buffer object here
         compressors: compressors
     });
 
